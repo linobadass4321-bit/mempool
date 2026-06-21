@@ -1,0 +1,89 @@
+blockchain.pyblockchain.pyhttps://github.com/bitcoin/bitcoin/tree/master/doc__version__ = "1.0.0"
+
+from .blockchain import Blockchain
+from .block import Block
+from .transaction import Transactionfrom dataclasses import dataclass, asdict
+import time
+import hashlib
+import json
+
+@dataclass
+class Transaction:
+    sender: str
+    recipient: str
+    amount: float
+    timestamp: float = None
+
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = time.time()
+
+    def to_dict(self):
+        return {
+            "sender": self.sender,
+            "recipient": self.recipient,
+            "amount": float(self.amount),
+            "timestamp": float(self.timestamp)
+        }
+
+    def txid(self) -> str:
+        # Deterministic txid using SHA-256
+        data = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(data).hexdigest()import hashlib
+from typing import List
+
+def merkle_parent(a: str, b: str) -> str:
+    return hashlib.sha256((a + b).encode()).hexdigest()
+
+def merkle_root(txids: List[str]) -> str:
+    if not txids:
+        # empty tree returns hash of empty string
+        return hashlib.sha256(b"").hexdigest()
+    layer = txids[:]
+    while len(layer) > 1:
+        if len(layer) % 2 == 1:
+            layer.append(layer[-1])
+        layer = [merkle_parent(layer[i], layer[i+1]) for i in range(0, len(layer), 2)]
+    return layer[0]from dataclasses import dataclass, field
+import time
+import hashlib
+import json
+from typing import List
+from .transaction import Transaction
+from .merkle_tree import merkle_root
+
+@dataclass
+class Block:
+    index: int
+    previous_hash: str
+    transactions: List[Transaction]
+    timestamp: float = None
+    nonce: int = 0
+    difficulty: int = 4
+    merkle_root: str = field(init=False)
+    hash: str = field(default="", init=False)
+
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = time.time()
+        txids = [tx.txid() for tx in self.transactions]
+        self.merkle_root = merkle_root(txids)
+        self.hash = self.compute_hash()
+
+    def header_dict(self):
+        return {
+            "index": self.index,
+            "previous_hash": self.previous_hash,
+            "timestamp": float(self.timestamp),
+            "nonce": int(self.nonce),
+            "difficulty": int(self.difficulty),
+            "merkle_root": self.merkle_root
+        }
+
+    def compute_hash(self) -> str:
+        header = self.header_dict()
+        header_json = json.dumps(header, sort_keys=True, separators=(",", ":"))
+        # include transactions' txids to ensure block hash ties to payload
+        txids = [tx.txid() for tx in self.transactions]
+        payload = header_json + json.dumps(txids, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode()).hexdigest()e795f6023f89156e9117cceeabb5803d3a69e24aacedac2e6fb12ca9edfc362bf3e97132df44742d
